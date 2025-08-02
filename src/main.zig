@@ -17,8 +17,15 @@ fn matchPattern(input_line: []const u8, pattern: []const u8) bool {
             } else false;
         }
     } else if (pattern.len > 2) {
-        const characterGroup = pattern[1..pattern.len-1];
-        return std.mem.indexOfAny(u8, input_line, characterGroup) != null;
+        const startFrom: usize = if (pattern[1] == '^') 2 else 1;
+        const group = pattern[startFrom .. pattern.len - 1];
+        if (startFrom == 2) {
+            return for (group) |c| {
+                if (std.mem.indexOfScalar(u8, input_line, c) == null) break true;
+            } else false;
+        }
+
+        return std.mem.indexOfAny(u8, input_line, group) != null;
     }
 
     @panic("Unhandled pattern");
