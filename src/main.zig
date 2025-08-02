@@ -1,7 +1,12 @@
 const std = @import("std");
 
 fn matchPattern(input_line: []const u8, pattern: []const u8) bool {
-    if (pattern.len == 1) {
+    if (std.mem.eql(u8, pattern, "\\d")) {
+        return for (input_line) |c| {
+            if (std.ascii.isDigit(c))
+                break true;
+        } else false;
+    } else if (pattern.len == 1) {
         return std.mem.indexOf(u8, input_line, pattern) != null;
     } else {
         @panic("Unhandled pattern");
