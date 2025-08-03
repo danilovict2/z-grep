@@ -6,6 +6,9 @@ const PatternError = error{
 };
 
 pub fn matches(text: []const u8, pattern: []const u8) PatternError!bool {
+    if (pattern[0] == '^')
+        return try matchesHere(text, pattern[1..]);
+
     return for (0..text.len) |i| {
         if (try matchesHere(text[i..], pattern)) {
             break true;
