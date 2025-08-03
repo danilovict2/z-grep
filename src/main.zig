@@ -1,34 +1,8 @@
 const std = @import("std");
+const matcher = @import("matcher/matcher.zig");
 
-fn matchPattern(input_line: []const u8, pattern: []const u8) bool {
-    if (pattern.len == 1) {
-        return std.mem.indexOf(u8, input_line, pattern) != null;
-    } else if (pattern.len == 2) {
-        if (std.mem.eql(u8, pattern, "\\d")) {
-            return for (input_line) |c| {
-                if (std.ascii.isDigit(c))
-                    break true;
-            } else false;
-        } else if (std.mem.eql(u8, pattern, "\\w")) {
-            return for (input_line) |c| {
-                if (std.ascii.isAlphanumeric(c) or c == '_') {
-                    break true;
-                }
-            } else false;
-        }
-    } else if (pattern.len > 2) {
-        const startFrom: usize = if (pattern[1] == '^') 2 else 1;
-        const group = pattern[startFrom .. pattern.len - 1];
-        if (startFrom == 2) {
-            return for (group) |c| {
-                if (std.mem.indexOfScalar(u8, input_line, c) == null) break true;
-            } else false;
-        }
-
-        return std.mem.indexOfAny(u8, input_line, group) != null;
-    }
-
-    @panic("Unhandled pattern");
+fn matchPattern(input_line: []const u8, pattern: []const u8) !bool {
+    return try matcher.matches(input_line, pattern);
 }
 
 pub fn main() !void {
@@ -44,15 +18,15 @@ pub fn main() !void {
         std.process.exit(1);
     }
 
-    std.debug.print("Logs from your program will appear here!\n", .{});
-
     const pattern = args[2];
     var input_line: [1024]u8 = undefined;
     const input_len = try std.io.getStdIn().reader().read(&input_line);
     const input_slice = input_line[0..input_len];
-    if (matchPattern(input_slice, pattern)) {
+    if (try matchPattern(input_slice, pattern)) {
+        std.debug.print("Match\n", .{});
         std.process.exit(0);
     } else {
+        std.debug.print("Not a match\n", .{});
         std.process.exit(1);
     }
 }
