@@ -7,7 +7,7 @@ const PatternError = error{
 
 pub fn matches(text: []const u8, pattern: []const u8) PatternError!bool {
     if (pattern[0] == '^')
-        return try matchesHere(text, pattern[1..]);
+        return matchesHere(text, pattern[1..]);
 
     return for (0..text.len) |i| {
         if (try matchesHere(text[i..], pattern)) {
@@ -21,6 +21,8 @@ fn matchesHere(text: []const u8, pattern: []const u8) PatternError!bool {
 
     if (pattern.len == 0) {
         return true;
+    } else if (pattern[0] == '$' and pattern.len == 1) {
+        return text.len == 0;
     } else if (text.len == 0) {
         return false;
     } else if (pattern.len >= 2 and std.mem.eql(u8, pattern[0..2], "\\d") and std.ascii.isDigit(text[0])) {
