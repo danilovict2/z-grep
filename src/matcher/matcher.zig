@@ -23,6 +23,14 @@ fn matchesHere(text: []const u8, pattern: []const u8) PatternError!bool {
         return true;
     } else if (pattern[0] == '$' and pattern.len == 1) {
         return text.len == 0;
+    } else if (pattern.len >= 2 and pattern[1] == '?') {
+        if (text.len == 0) {
+            return true;
+        } else if (text[0] == pattern[0]) {
+            return if (text.len == 1 or text[1] != pattern[0]) matchesHere(text[1..], pattern[2..]) else false;
+        }
+
+        return matchesHere(text, pattern[2..]);
     } else if (text.len == 0) {
         return false;
     } else if (pattern.len >= 2 and std.mem.eql(u8, pattern[0..2], "\\d") and std.ascii.isDigit(text[0])) {
