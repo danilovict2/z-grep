@@ -39,10 +39,10 @@ fn matchesHere(text: []const u8, pattern: []const u8) PatternError!bool {
         return matchesHere(text[1..], pattern[2..]);
     } else if (pattern.len >= 2 and pattern[1] == '+') {
         const match_char = pattern[0];
-        if (text[0] != match_char) return false;
+        if (text[0] != match_char and match_char != '.') return false;
         const lastPos = matchPlus(text, match_char) + 1;
         const rem = pattern[2..];
-        return for (0..lastPos) |j| {
+        return for (1..lastPos) |j| {
             if (try matchesHere(text[j..], rem)) {
                 break true;
             }
@@ -52,12 +52,17 @@ fn matchesHere(text: []const u8, pattern: []const u8) PatternError!bool {
         const positive, const first_char: usize = if (pattern[1] == '^') .{ false, 2 } else .{ true, 1 };
         const matchesGroup = std.mem.indexOfScalar(u8, pattern[first_char..groupEnd], text[0]) != null;
         return if (matchesGroup == positive) matchesHere(text[1..], if (groupEnd + 1 < pattern.len) pattern[groupEnd + 1 ..] else "") else false;
+    } else if (pattern[0] == '.') {
+        return matchesHere(text[1..], pattern[1..]);
     }
 
     return if (text[0] == pattern[0]) matchesHere(text[1..], pattern[1..]) else false;
 }
 
 fn matchPlus(text: []const u8, char: u8) usize {
+    if (char == '.')
+        return text.len - 1;
+
     var i: usize = 1;
     while (i < text.len and text[i] == char) : (i += 1) {}
     return i;
