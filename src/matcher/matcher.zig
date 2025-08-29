@@ -3,6 +3,7 @@ const expect = std.testing.expect;
 
 const PatternError = error{
     UnclosedGroup,
+    InvalidAlternation,
 };
 
 pub fn matches(text: []const u8, pattern: []const u8) PatternError!bool {
@@ -40,13 +41,13 @@ fn matchesHere(text: []const u8, pattern: []const u8) PatternError!bool {
     } else if (pattern.len >= 2 and pattern[1] == '+') {
         return matchPlus(text, pattern[0..1], pattern[2..]);
     } else if (pattern[0] == '[') {
-        const groupEnd = std.mem.indexOf(u8, pattern, "]") orelse return PatternError.UnclosedGroup;
+        const groupEnd = try findClosingBracket(pattern, '[', ']', PatternError.UnclosedGroup);
         const positive, const first_char: usize = if (pattern[1] == '^') .{ false, 2 } else .{ true, 1 };
         const matchesGroup = std.mem.indexOfScalar(u8, pattern[first_char..groupEnd], text[0]) != null;
         return if (matchesGroup == positive) matchesHere(text[1..], if (groupEnd + 1 < pattern.len) pattern[groupEnd + 1 ..] else "") else false;
     } else if (pattern[0] == '.') {
         return matchesHere(text[1..], pattern[1..]);
-    }
+    } else if (pattern[0] == '(') {}
 
     return if (text[0] == pattern[0]) matchesHere(text[1..], pattern[1..]) else false;
 }
@@ -61,4 +62,17 @@ fn matchPlus(text: []const u8, pattern: []const u8, remaining: []const u8) Patte
             break true;
         }
     } else false;
+}
+
+fn findClosingBracket(str: []const u8, open: u8, closed: u8, comptime err: PatternError) PatternError!usize {
+    var counter: usize = 0;
+
+    return for (str, 0..) |c, i| {
+        if (c == open)
+            counter += 1;
+        if (c == closed)
+            counter -= 1;
+        if (counter == 0)
+            break i;
+    } else err;
 }
