@@ -47,7 +47,21 @@ fn matchesHere(text: []const u8, pattern: []const u8) PatternError!bool {
         return if (matchesGroup == positive) matchesHere(text[1..], if (groupEnd + 1 < pattern.len) pattern[groupEnd + 1 ..] else "") else false;
     } else if (pattern[0] == '.') {
         return matchesHere(text[1..], pattern[1..]);
-    } else if (pattern[0] == '(') {}
+    } else if (pattern[0] == '(') {
+        const closing = try findClosingBracket(pattern, '(', ')', PatternError.InvalidAlternation);
+        const alteration = pattern[1..closing];
+        if (pattern.len > (closing + 1) and pattern[closing + 1] == '+')
+            return matchPlus(text, alteration, pattern[closing + 1 ..]);
+
+        var patterns = std.mem.splitSequence(u8, alteration, "|");
+        while (patterns.next()) |p| {
+            if (text.len >= p.len and try matches(text, p)) {
+                if (pattern.len <= (closing + 1))
+                    return true;
+                return matchesHere(text[p.len..], pattern[closing + 1 ..]);
+            }
+        }
+    }
 
     return if (text[0] == pattern[0]) matchesHere(text[1..], pattern[1..]) else false;
 }
