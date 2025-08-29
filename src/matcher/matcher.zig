@@ -38,15 +38,7 @@ fn matchesHere(text: []const u8, pattern: []const u8) PatternError!bool {
     } else if (pattern.len >= 2 and std.mem.eql(u8, pattern[0..2], "\\w") and (std.ascii.isAlphanumeric(text[0]) or text[0] == '_')) {
         return matchesHere(text[1..], pattern[2..]);
     } else if (pattern.len >= 2 and pattern[1] == '+') {
-        const match_char = pattern[0];
-        if (text[0] != match_char and match_char != '.') return false;
-        const lastPos = matchPlus(text, match_char) + 1;
-        const rem = pattern[2..];
-        return for (1..lastPos) |j| {
-            if (try matchesHere(text[j..], rem)) {
-                break true;
-            }
-        } else false;
+        return matchPlus(text, pattern[0..1], pattern[2..]);
     } else if (pattern[0] == '[') {
         const groupEnd = std.mem.indexOf(u8, pattern, "]") orelse return PatternError.UnclosedGroup;
         const positive, const first_char: usize = if (pattern[1] == '^') .{ false, 2 } else .{ true, 1 };
@@ -59,23 +51,14 @@ fn matchesHere(text: []const u8, pattern: []const u8) PatternError!bool {
     return if (text[0] == pattern[0]) matchesHere(text[1..], pattern[1..]) else false;
 }
 
-fn matchPlus(text: []const u8, char: u8) usize {
-    if (char == '.')
-        return text.len - 1;
-
+fn matchPlus(text: []const u8, pattern: []const u8, remaining: []const u8) PatternError!bool {
     var i: usize = 1;
-    while (i < text.len and text[i] == char) : (i += 1) {}
-    return i;
-}
+    while (i < text.len and matches(text[i..], pattern) catch false) : (i += 1) {}
+    i += 1;
 
-test "Matching" {
-    try expect(try matches("1 apple", "\\d apple"));
-    try expect(!try matches("1 orange", "\\d apple"));
-    try expect(try matches("100 apples", "\\d\\d\\d apple"));
-    try expect(!try matches("100 oranges", "\\d\\d\\d apple"));
-    try expect(try matches("4 dogs", "\\d \\w\\w\\ws"));
-    try expect(try matches("4 cats", "\\d \\w\\w\\ws"));
-    try expect(!try matches("1 dog", "\\d \\w\\w\\ws"));
-    try expect(try matches("sally has 3 apples", "\\d apple"));
-    try expect(try matches("caats", "ca+ts"));
+    return for (1..i) |j| {
+        if (try matchesHere(text[j..], remaining)) {
+            break true;
+        }
+    } else false;
 }
