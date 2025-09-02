@@ -64,3 +64,9 @@ test "Wildcard" {
     try expect(!try matcher.matches("cog", "d.g"));
     try expect(try matcher.matches("goøö0Ogol", "g.+gol"));
 }
+
+test "Alternation" {
+    try expect(try matcher.matches("cat", "(cat|dog)"));
+    try expect(try matcher.matches("I see 1 cat, 2 dogs and 3 cows", "^I see (\\d (cat|dog|cow)s?(, | and )?)+$"));
+    try expect(!try matcher.matches("I see 1 cat, 2 dogs and 3 cows", "^I see (\\d (cat|dog|cow)(, | and )?)+$"));
+}
