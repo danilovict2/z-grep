@@ -13,7 +13,8 @@ pub fn matches(text: []const u8, pattern: []const u8) !bool {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
-    const nodes = try parser.parse(allocator, pattern);
+    const p = try parser.Parser.init(allocator, pattern);
+    const nodes = try p.parse();
     return for (0..text.len) |i| {
         if (replacementMatchesHere(text[i..], nodes)) {
             break true;
@@ -33,19 +34,28 @@ pub fn matches(text: []const u8, pattern: []const u8) !bool {
 
 fn replacementMatchesHere(text: []const u8, nodes: []Node) bool {
     var i: usize = 0;
-    return for (nodes) |node| {
+    for (nodes) |node| {
         if (i == text.len)
             return false;
 
         switch (node) {
             .Literal => |literal| {
                 if (text[i] != literal)
-                    break true;
+                    return false;
+            },
+            .CharacterClass => |class| {
+                if (std.mem.eql(u8, class, "\\d") and !std.ascii.isDigit(text[i]))
+                    return false;
+
+                if (std.mem.eql(u8, class, "\\w") and !(std.ascii.isAlphabetic(text[0]) or text[0] == '_'))
+                    return false;
             },
         }
 
         i += 1;
-    } else false;
+    }
+
+    return true;
 }
 
 fn matchesHere(text: []const u8, pattern: []const u8) PatternError!bool {
