@@ -1,18 +1,50 @@
 const std = @import("std");
+const parser = @import("parser.zig");
 const expect = std.testing.expect;
+const Node = parser.Node;
 
 const PatternError = error{
     UnclosedGroup,
 };
 
-pub fn matches(text: []const u8, pattern: []const u8) PatternError!bool {
-    if (pattern[0] == '^')
-        return matchesHere(text, pattern[1..]);
+pub fn matches(text: []const u8, pattern: []const u8) !bool {
+    std.debug.print("Text: {s}\nPattern: {s}\n", .{ text, pattern });
 
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const nodes = try parser.parse(allocator, pattern);
     return for (0..text.len) |i| {
-        if (try matchesHere(text[i..], pattern)) {
+        if (replacementMatchesHere(text[i..], nodes)) {
             break true;
         }
+    } else false;
+
+    //if (pattern[0] == '^')
+    //  return matchesHere(text, pattern[1..]);
+
+    // return for (0..text.len) |i| {
+    //   if (try matchesHere(text[i..], pattern)) {
+    //     break true;
+    //}
+    //} else false;
+    //
+}
+
+fn replacementMatchesHere(text: []const u8, nodes: []Node) bool {
+    var i: usize = 0;
+    return for (nodes) |node| {
+        if (i == text.len)
+            return false;
+
+        switch (node) {
+            .Literal => |literal| {
+                if (text[i] != literal)
+                    break true;
+            },
+        }
+
+        i += 1;
     } else false;
 }
 
@@ -38,8 +70,6 @@ fn matchesHere(text: []const u8, pattern: []const u8) PatternError!bool {
         const positive, const first_char: usize = if (pattern[1] == '^') .{ false, 2 } else .{ true, 1 };
         const matchesGroup = std.mem.indexOfScalar(u8, pattern[first_char..groupEnd], text[0]) != null;
         return if (matchesGroup == positive) matchesHere(text[1..], if (groupEnd + 1 < pattern.len) pattern[groupEnd + 1 ..] else "") else false;
-    } else if (pattern[0] == '.') {
-        return matchesHere(text[1..], pattern[1..]);
     } else if (pattern[0] == '(') {
         const closing = try findClosingBracket(pattern, '(', ')');
         const group = pattern[0 .. closing + 1];
@@ -69,14 +99,14 @@ fn matchesHere(text: []const u8, pattern: []const u8) PatternError!bool {
         }
     }
 
-    return if (text[0] == pattern[0]) matchesHere(text[1..], pattern[1..]) else false;
+    return if (text[0] == pattern[0] or pattern[0] == '.') matchesHere(text[1..], pattern[1..]) else false;
 }
 
 fn matchPlus(text: []const u8, pattern: []const u8, remaining: []const u8) PatternError!bool {
     std.debug.print("Plus text, pattern and remaining: {s}, {s}, {s}\n", .{ text, pattern, remaining });
     var i: usize = 0;
     while (i < text.len and matches(text[i..], pattern) catch false) : (i += pattern.len) {}
-    i += 1;
+    i += @min(text.len, i + 1);
 
     return for (1..i) |j| {
         if (try matchesHere(text[j..], remaining)) {
@@ -89,9 +119,9 @@ fn matchOptional(text: []const u8, pattern: []const u8, remaining: []const u8) P
     if (text.len == 0) {
         return true;
     } else if (text.len >= pattern.len and matches(text[0..pattern.len], pattern) catch false) {
-        if (text.len < pattern.len) {
+        if (text[pattern.len..].len < pattern.len) {
             return true;
-        } else if (text.len >= pattern.len and !(matches(text[pattern.len..], pattern) catch false)) {
+        } else if (!(matches(text[pattern.len..], pattern) catch false)) {
             return matchesHere(text[pattern.len..], remaining);
         }
 
