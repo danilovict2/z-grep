@@ -34,28 +34,32 @@ pub fn matches(text: []const u8, pattern: []const u8) !bool {
 
 fn replacementMatchesHere(text: []const u8, nodes: []Node) bool {
     var i: usize = 0;
-    for (nodes) |node| {
+    return for (nodes) |node| {
         if (i == text.len)
-            return false;
+            break false;
 
         switch (node) {
             .Literal => |literal| {
                 if (text[i] != literal)
-                    return false;
+                    break false;
             },
             .CharacterClass => |class| {
                 if (std.mem.eql(u8, class, "\\d") and !std.ascii.isDigit(text[i]))
-                    return false;
+                    break false;
 
                 if (std.mem.eql(u8, class, "\\w") and !(std.ascii.isAlphabetic(text[0]) or text[0] == '_'))
-                    return false;
+                    break false;
+            },
+            .Group => |group| {
+                const positive, const first_char: usize = if (group[0] == '^') .{ false, 1 } else .{ true, 0 };
+                const matchesGroup = std.mem.indexOfScalar(u8, group[first_char..], text[0]) != null;
+                if (matchesGroup != positive)
+                    break false;
             },
         }
 
         i += 1;
-    }
-
-    return true;
+    } else true;
 }
 
 fn matchesHere(text: []const u8, pattern: []const u8) PatternError!bool {

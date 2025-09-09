@@ -4,10 +4,12 @@ const Allocator = std.mem.Allocator;
 pub const Node = union(enum) {
     Literal: u8,
     CharacterClass: []const u8,
+    Group: []const u8,
 };
 
 const PatternError = error{
     UnexpectedEOF,
+    UnclosedGroup,
 };
 
 pub const Parser = struct {
@@ -38,6 +40,11 @@ pub const Parser = struct {
                         else => try nodes.append(.{ .Literal = '\\' }),
                     }
                 },
+                '[' => {
+                    const end = std.mem.indexOfScalar(u8, self.raw[self.ip..], ']') orelse return PatternError.UnclosedGroup;
+                    try nodes.append(.{ .Group = self.raw[self.ip .. end + 1] });
+                    self.ip = end + 2;
+                },
                 else => try nodes.append(.{ .Literal = c }),
             }
         }
@@ -53,8 +60,12 @@ pub const Parser = struct {
     }
 
     fn next(self: *Self) u8 {
-        self.ip += 1;
+        self.advance();
         return self.raw[self.ip - 1];
+    }
+
+    fn advance(self: *Self) void {
+        self.ip += 1;
     }
 
     fn isAtEnd(self: *Self) bool {
