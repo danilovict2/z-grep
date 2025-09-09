@@ -15,6 +15,10 @@ pub fn matches(text: []const u8, pattern: []const u8) !bool {
     const allocator = arena.allocator();
     const p = try parser.Parser.init(allocator, pattern);
     const nodes = try p.parse();
+
+    if (pattern[0] == '^')
+        return replacementMatchesHere(text, nodes[1..]);
+
     return for (0..text.len) |i| {
         if (replacementMatchesHere(text[i..], nodes)) {
             break true;
@@ -33,26 +37,32 @@ pub fn matches(text: []const u8, pattern: []const u8) !bool {
 }
 
 fn replacementMatchesHere(text: []const u8, nodes: []Node) bool {
+    std.debug.print("Starting Text: {s}\n", .{text});
     var i: usize = 0;
     return for (nodes) |node| {
         if (i == text.len)
             break false;
 
+        std.debug.print("Current Text: {s}\n", .{text[i..]});
+
         switch (node) {
             .Literal => |literal| {
+                std.debug.print("Literal: {c}\n", .{literal});
                 if (text[i] != literal)
                     break false;
             },
             .CharacterClass => |class| {
+                std.debug.print("Class: {s}\n", .{class});
                 if (std.mem.eql(u8, class, "\\d") and !std.ascii.isDigit(text[i]))
                     break false;
 
-                if (std.mem.eql(u8, class, "\\w") and !(std.ascii.isAlphabetic(text[0]) or text[0] == '_'))
+                if (std.mem.eql(u8, class, "\\w") and !(std.ascii.isAlphabetic(text[i]) or text[i] == '_'))
                     break false;
             },
             .Group => |group| {
+                std.debug.print("Group: {s}\n", .{group});
                 const positive, const first_char: usize = if (group[0] == '^') .{ false, 1 } else .{ true, 0 };
-                const matchesGroup = std.mem.indexOfScalar(u8, group[first_char..], text[0]) != null;
+                const matchesGroup = std.mem.indexOfScalar(u8, group[first_char..], text[i]) != null;
                 if (matchesGroup != positive)
                     break false;
             },
