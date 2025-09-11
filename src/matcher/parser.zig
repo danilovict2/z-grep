@@ -3,6 +3,7 @@ const Allocator = std.mem.Allocator;
 
 pub const Node = union(enum) {
     Literal: u8,
+    EndOfString,
     CharacterClass: []const u8,
     Group: []const u8,
 };
@@ -45,6 +46,7 @@ pub const Parser = struct {
                     try nodes.append(.{ .Group = self.raw[self.ip .. end + 1] });
                     self.ip = end + 2;
                 },
+                '$' => try nodes.append(.{ .EndOfString = {} }),
                 else => try nodes.append(.{ .Literal = c }),
             }
         }

@@ -24,16 +24,6 @@ pub fn matches(text: []const u8, pattern: []const u8) !bool {
             break true;
         }
     } else false;
-
-    //if (pattern[0] == '^')
-    //  return matchesHere(text, pattern[1..]);
-
-    // return for (0..text.len) |i| {
-    //   if (try matchesHere(text[i..], pattern)) {
-    //     break true;
-    //}
-    //} else false;
-    //
 }
 
 fn replacementMatchesHere(text: []const u8, nodes: []Node) bool {
@@ -41,7 +31,7 @@ fn replacementMatchesHere(text: []const u8, nodes: []Node) bool {
     var i: usize = 0;
     return for (nodes) |node| {
         if (i == text.len)
-            break false;
+            break node == Node.EndOfString;
 
         std.debug.print("Current Text: {s}\n", .{text[i..]});
 
@@ -65,6 +55,9 @@ fn replacementMatchesHere(text: []const u8, nodes: []Node) bool {
                 const matchesGroup = std.mem.indexOfScalar(u8, group[first_char..], text[i]) != null;
                 if (matchesGroup != positive)
                     break false;
+            },
+            .EndOfString => {
+                break false;
             },
         }
 
