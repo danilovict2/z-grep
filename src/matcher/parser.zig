@@ -6,6 +6,7 @@ pub const Node = union(enum) {
     EndOfString,
     OneOrMore,
     ZeroOrOne,
+    Wildcard,
     CharacterClass: []const u8,
     Group: []const u8,
 };
@@ -62,6 +63,7 @@ pub const Parser = struct {
 
                     try nodes.insert(nodes.items.len - 1, .{ .ZeroOrOne = {} });
                 },
+                '.' => try nodes.append(.{ .Wildcard = {} }),
                 else => try nodes.append(.{ .Literal = c }),
             }
         }

@@ -42,7 +42,7 @@ fn replacementMatchesHere(text: []const u8, nodes: []Node) PatternError!bool {
                     return PatternError.InvalidPattern;
 
                 const start = textIndex;
-                while (textIndex < text[textIndex..].len and matchesNode(text[textIndex..], textIndex, nodes[i + 1])) : (textIndex += 1) {}
+                while (textIndex < text.len and matchesNode(text[textIndex..], 0, nodes[i + 1])) : (textIndex += 1) {}
                 break for (start..textIndex + 1) |j| {
                     if (try replacementMatchesHere(text[j..], nodes[i + 1 ..])) {
                         break true;
@@ -95,6 +95,10 @@ fn matchesNode(text: []const u8, textIndex: usize, node: Node) bool {
         },
         .EndOfString => {
             return false;
+        },
+        .Wildcard => {
+            std.debug.print("Wildcard\n", .{});
+            return true;
         },
         else => unreachable,
     }
