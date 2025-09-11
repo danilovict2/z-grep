@@ -4,6 +4,7 @@ const Allocator = std.mem.Allocator;
 pub const Node = union(enum) {
     Literal: u8,
     EndOfString,
+    OneOrMore,
     CharacterClass: []const u8,
     Group: []const u8,
 };
@@ -11,6 +12,7 @@ pub const Node = union(enum) {
 const PatternError = error{
     UnexpectedEOF,
     UnclosedGroup,
+    UnexpectedQuantifier,
 };
 
 pub const Parser = struct {
@@ -47,6 +49,12 @@ pub const Parser = struct {
                     self.ip = end + 2;
                 },
                 '$' => try nodes.append(.{ .EndOfString = {} }),
+                '+' => {
+                    if (nodes.items.len == 0)
+                        return PatternError.UnexpectedQuantifier;
+
+                    try nodes.insert(nodes.items.len - 1, .{ .OneOrMore = {} });
+                },
                 else => try nodes.append(.{ .Literal = c }),
             }
         }

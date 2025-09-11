@@ -4,7 +4,7 @@ const expect = std.testing.expect;
 const Node = parser.Node;
 
 const PatternError = error{
-    UnclosedGroup,
+    InvalidPattern,
 };
 
 pub fn matches(text: []const u8, pattern: []const u8) !bool {
@@ -20,49 +20,74 @@ pub fn matches(text: []const u8, pattern: []const u8) !bool {
         return replacementMatchesHere(text, nodes[1..]);
 
     return for (0..text.len) |i| {
-        if (replacementMatchesHere(text[i..], nodes)) {
+        if (try replacementMatchesHere(text[i..], nodes)) {
             break true;
         }
     } else false;
 }
 
-fn replacementMatchesHere(text: []const u8, nodes: []Node) bool {
+fn replacementMatchesHere(text: []const u8, nodes: []Node) PatternError!bool {
     std.debug.print("Starting Text: {s}\n", .{text});
-    var i: usize = 0;
-    return for (nodes) |node| {
-        if (i == text.len)
+    var textIndex: usize = 0;
+    return for (nodes, 0..) |node, i| {
+        if (textIndex == text.len)
             break node == Node.EndOfString;
 
-        std.debug.print("Current Text: {s}\n", .{text[i..]});
+        std.debug.print("Current Text: {s}\n", .{text[textIndex..]});
 
         switch (node) {
-            .Literal => |literal| {
-                std.debug.print("Literal: {c}\n", .{literal});
-                if (text[i] != literal)
-                    break false;
-            },
-            .CharacterClass => |class| {
-                std.debug.print("Class: {s}\n", .{class});
-                if (std.mem.eql(u8, class, "\\d") and !std.ascii.isDigit(text[i]))
-                    break false;
+            .OneOrMore => {
+                std.debug.print("One Or More\n", .{});
+                if ((i + 1) == nodes.len)
+                    return PatternError.InvalidPattern;
 
-                if (std.mem.eql(u8, class, "\\w") and !(std.ascii.isAlphabetic(text[i]) or text[i] == '_'))
-                    break false;
+                const start = textIndex;
+                while (textIndex < text[textIndex..].len and matchesNode(text[textIndex..], textIndex, nodes[i + 1])) : (textIndex += 1) {}
+                return for (start..textIndex + 1) |j| {
+                    if (try replacementMatchesHere(text[j..], nodes[i + 1 ..])) {
+                        break true;
+                    }
+                } else false;
             },
-            .Group => |group| {
-                std.debug.print("Group: {s}\n", .{group});
-                const positive, const first_char: usize = if (group[0] == '^') .{ false, 1 } else .{ true, 0 };
-                const matchesGroup = std.mem.indexOfScalar(u8, group[first_char..], text[i]) != null;
-                if (matchesGroup != positive)
+            else => {
+                if (!matchesNode(text, textIndex, node))
                     break false;
-            },
-            .EndOfString => {
-                break false;
             },
         }
 
-        i += 1;
+        textIndex += 1;
     } else true;
+}
+
+fn matchesNode(text: []const u8, textIndex: usize, node: Node) bool {
+    switch (node) {
+        .Literal => |literal| {
+            std.debug.print("Literal: {c}\n", .{literal});
+            if (text[textIndex] != literal)
+                return false;
+        },
+        .CharacterClass => |class| {
+            std.debug.print("Class: {s}\n", .{class});
+            if (std.mem.eql(u8, class, "\\d") and !std.ascii.isDigit(text[textIndex]))
+                return false;
+
+            if (std.mem.eql(u8, class, "\\w") and !(std.ascii.isAlphabetic(text[textIndex]) or text[textIndex] == '_'))
+                return false;
+        },
+        .Group => |group| {
+            std.debug.print("Group: {s}\n", .{group});
+            const positive, const first_char: usize = if (group[0] == '^') .{ false, 1 } else .{ true, 0 };
+            const matchesGroup = std.mem.indexOfScalar(u8, group[first_char..], text[textIndex]) != null;
+            if (matchesGroup != positive)
+                return false;
+        },
+        .EndOfString => {
+            return false;
+        },
+        else => unreachable,
+    }
+
+    return true;
 }
 
 fn matchesHere(text: []const u8, pattern: []const u8) PatternError!bool {
