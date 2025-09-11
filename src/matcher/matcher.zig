@@ -31,7 +31,7 @@ fn replacementMatchesHere(text: []const u8, nodes: []Node) PatternError!bool {
     var textIndex: usize = 0;
     return for (nodes, 0..) |node, i| {
         if (textIndex == text.len)
-            break node == Node.EndOfString;
+            break node == Node.EndOfString or node == Node.ZeroOrOne;
 
         std.debug.print("Current Text: {s}\n", .{text[textIndex..]});
 
@@ -43,11 +43,23 @@ fn replacementMatchesHere(text: []const u8, nodes: []Node) PatternError!bool {
 
                 const start = textIndex;
                 while (textIndex < text[textIndex..].len and matchesNode(text[textIndex..], textIndex, nodes[i + 1])) : (textIndex += 1) {}
-                return for (start..textIndex + 1) |j| {
+                break for (start..textIndex + 1) |j| {
                     if (try replacementMatchesHere(text[j..], nodes[i + 1 ..])) {
                         break true;
                     }
                 } else false;
+            },
+            .ZeroOrOne => {
+                std.debug.print("Zero Or One\n", .{});
+                if ((i + 1) == nodes.len)
+                    return PatternError.InvalidPattern;
+
+                if (matchesNode(text, textIndex, nodes[i + 1])) {
+                    if (nodes.len <= (i + 2) or !matchesNode(text, textIndex, nodes[i + 2]))
+                        break true;
+
+                    break false;
+                }
             },
             else => {
                 if (!matchesNode(text, textIndex, node))

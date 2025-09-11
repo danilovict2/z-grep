@@ -5,6 +5,7 @@ pub const Node = union(enum) {
     Literal: u8,
     EndOfString,
     OneOrMore,
+    ZeroOrOne,
     CharacterClass: []const u8,
     Group: []const u8,
 };
@@ -54,6 +55,12 @@ pub const Parser = struct {
                         return PatternError.UnexpectedQuantifier;
 
                     try nodes.insert(nodes.items.len - 1, .{ .OneOrMore = {} });
+                },
+                '?' => {
+                    if (nodes.items.len == 0)
+                        return PatternError.UnexpectedQuantifier;
+
+                    try nodes.insert(nodes.items.len - 1, .{ .ZeroOrOne = {} });
                 },
                 else => try nodes.append(.{ .Literal = c }),
             }
