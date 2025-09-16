@@ -2,6 +2,7 @@ const std = @import("std");
 const parser = @import("parser.zig");
 const expect = std.testing.expect;
 const Node = parser.Node;
+const Quantifier = parser.Quantifier;
 
 const PatternError = error{
     InvalidPattern,
@@ -28,20 +29,18 @@ pub fn matches(text: []const u8, pattern: []const u8) !bool {
 
 fn matchesHere(text: []const u8, nodes: []Node) PatternError!bool {
     std.debug.print("Starting Text: {s}\n", .{text});
+
     var textIndex: usize = 0;
     return for (nodes, 0..) |node, i| {
+        const quantifier = node.getQuantifier();
         if (textIndex == text.len)
-            break node == Node.EndOfString or node == Node.ZeroOrOne;
+            break node == Node.EndOfString or quantifier == Quantifier.ZeroOrOne;
 
         std.debug.print("Current Text: {s}\n", .{text[textIndex..]});
-        switch (node) {
+        switch (quantifier) {
             .OneOrMore => {
-                std.debug.print("One Or More\n", .{});
-                if ((i + 1) == nodes.len)
-                    return PatternError.InvalidPattern;
-
-                const start = textIndex;
-                while (textIndex < text.len and matchesNode(text, textIndex, nodes[i + 1])) : (textIndex += 1) {}
+                const start = textIndex + 1;
+                while (textIndex < text.len and matchesNode(text, &textIndex, nodes[i])) {}
                 break for (start..textIndex + 1) |j| {
                     if (try matchesHere(text[j..], nodes[i + 1 ..])) {
                         break true;
@@ -49,55 +48,62 @@ fn matchesHere(text: []const u8, nodes: []Node) PatternError!bool {
                 } else false;
             },
             .ZeroOrOne => {
-                std.debug.print("Zero Or One\n", .{});
-                if ((i + 1) == nodes.len)
-                    return PatternError.InvalidPattern;
-
-                if (matchesNode(text, textIndex, nodes[i + 1])) // Matches
-                    break matchesHere(text[textIndex + 1 ..], nodes[i + 2 ..]);
-
-                break matchesHere(text[textIndex..], nodes[i + 2 ..]);
+                _ = matchesNode(text, &textIndex, nodes[i]); // // The return value is ignored; only textIndex matters (it increments on match, unchanged otherwise)
+                break matchesHere(text[textIndex..], nodes[i + 1 ..]);
             },
             else => {
-                if (!matchesNode(text, textIndex, node))
+                if (!matchesNode(text, &textIndex, node))
                     break false;
             },
         }
-
-        textIndex += 1;
     } else true;
 }
 
-fn matchesNode(text: []const u8, textIndex: usize, node: Node) bool {
+fn matchesNode(text: []const u8, textIndex: *usize, node: Node) bool {
+    node.printSelf();
+
+    const idx = textIndex.*;
     switch (node) {
         .Literal => |literal| {
-            std.debug.print("Literal: {c}\n", .{literal});
-            if (text[textIndex] != literal)
+            if (text[idx] != literal[0])
                 return false;
+            textIndex.* += 1;
         },
         .CharacterClass => |class| {
-            std.debug.print("Class: {s}\n", .{class});
-            if (std.mem.eql(u8, class, "\\d") and !std.ascii.isDigit(text[textIndex]))
+            if (std.mem.eql(u8, class[0], "\\d") and !std.ascii.isDigit(text[idx]))
                 return false;
 
-            if (std.mem.eql(u8, class, "\\w") and !(std.ascii.isAlphanumeric(text[textIndex]) or text[textIndex] == '_'))
+            if (std.mem.eql(u8, class[0], "\\w") and !(std.ascii.isAlphanumeric(text[idx]) or text[idx] == '_'))
                 return false;
+
+            textIndex.* += 1;
         },
         .Group => |group| {
-            std.debug.print("Group: {s}\n", .{group});
-            const positive, const first_char: usize = if (group[0] == '^') .{ false, 1 } else .{ true, 0 };
-            const matchesGroup = std.mem.indexOfScalar(u8, group[first_char..], text[textIndex]) != null;
+            const positive, const first_char: usize = if (group[0][0] == '^') .{ false, 1 } else .{ true, 0 };
+            const matchesGroup = std.mem.indexOfScalar(u8, group[0][first_char..], text[idx]) != null;
             if (matchesGroup != positive)
                 return false;
+            textIndex.* += 1;
+        },
+        .Alternation => |alternation| {
+            const alternatives = alternation[0];
+            return for (alternatives) |alternative| {
+                const match = for (alternative.Children) |child| {
+                    if (!matchesNode(text, textIndex, child))
+                        break false;
+                } else true;
+
+                if (match)
+                    break true;
+            } else false;
         },
         .EndOfString => {
             return false;
         },
         .Wildcard => {
-            std.debug.print("Wildcard\n", .{});
+            textIndex.* += 1;
             return true;
         },
-        else => unreachable,
     }
 
     return true;
