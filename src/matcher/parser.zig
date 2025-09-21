@@ -3,26 +3,21 @@ const Allocator = std.mem.Allocator;
 
 pub const Quantifier = enum { One, OneOrMore, ZeroOrOne };
 
-const AlternationNode = struct { Children: []Node, Quantifier: Quantifier };
+const Group = struct { Children: []Node, Quantifier: Quantifier };
 
 pub const Node = union(enum) {
     Literal: struct { u8, Quantifier },
     EndOfString,
     Wildcard: struct { Quantifier },
     CharacterClass: struct { []const u8, Quantifier },
-    Group: struct { []const u8, Quantifier },
-    Alternation: struct { []AlternationNode, Quantifier },
+    CharacterGroup: struct { []const u8, Quantifier },
+    Group: Group,
+    Alternation: struct { []Group, Quantifier },
 
     pub fn printSelf(self: @This()) void {
-        switch (self.getQuantifier()) {
-            .OneOrMore => std.debug.print("One or More\n", .{}),
-            .ZeroOrOne => std.debug.print("Zero or One\n", .{}),
-            .One => {},
-        }
-
         switch (self) {
             .Literal => |literal| {
-                std.debug.print("Literal: {c}\n", .{literal[0]});
+                std.debug.print("Literal: {c}\n", .{ literal[0]  });
             },
             .EndOfString => {
                 std.debug.print("End Of String\n", .{});
@@ -33,17 +28,21 @@ pub const Node = union(enum) {
             .CharacterClass => |class| {
                 std.debug.print("Class: {s}\n", .{class[0]});
             },
-            .Group => |group| {
-                std.debug.print("Group: {s}\n", .{group[0]});
+            .CharacterGroup => |group| {
+                std.debug.print("Character Group: {s}\n", .{group[0]});
             },
             .Alternation => |alternation| {
                 const alternatives = alternation[0];
                 for (alternatives, 0..) |alternative, i| {
                     std.debug.print("Alternative {}\n", .{i});
-                    for (alternative.Children) |child| {
+                    for (alternative.Children) |child|
                         child.printSelf();
-                    }
                 }
+            },
+            .Group => |group| {
+                std.debug.print("Group:\n", .{});
+                for (group.Children) |child|
+                    child.printSelf();
             },
         }
     }
@@ -53,7 +52,8 @@ pub const Node = union(enum) {
             .Literal => |literal| literal[1],
             .Wildcard => |wildcard| wildcard[0],
             .CharacterClass => |class| class[1],
-            .Group => |group| group[1],
+            .Group => |group| group.Quantifier,
+            .CharacterGroup => |group| group[1],
             .Alternation => |alternation| alternation[1],
             .EndOfString => Quantifier.One,
         };
@@ -64,6 +64,7 @@ const PatternError = error{
     UnexpectedEOF,
     UnclosedGroup,
     UnexpectedQuantifier,
+    InvalidBackreference,
 };
 
 pub const Parser = struct {
@@ -91,12 +92,13 @@ pub const Parser = struct {
                     switch (self.next()) {
                         'd' => try nodes.append(.{ .CharacterClass = .{ "\\d", Quantifier.One } }),
                         'w' => try nodes.append(.{ .CharacterClass = .{ "\\w", Quantifier.One } }),
+                        '1' => try nodes.append(try parseBackreference(nodes)),
                         else => try nodes.append(.{ .Literal = .{ '\\', Quantifier.One } }),
                     }
                 },
                 '[' => {
-                    const end = std.mem.indexOfScalar(u8, self.raw[self.ip..], ']') orelse return PatternError.UnclosedGroup;
-                    try nodes.append(.{ .Group = .{ self.raw[self.ip .. end + 1], Quantifier.One } });
+                    const end = std.mem.indexOfScalarPos(u8, self.raw, self.ip, ']') orelse return PatternError.UnclosedGroup;
+                    try nodes.append(.{ .CharacterGroup = .{ self.raw[self.ip..end], Quantifier.One } });
                     self.ip = end + 2;
                 },
                 '$' => try nodes.append(.{ .EndOfString = {} }),
@@ -108,8 +110,8 @@ pub const Parser = struct {
                 },
                 '.' => try nodes.append(.{ .Wildcard = .{Quantifier.One} }),
                 '(' => {
-                    const alternation = try self.parseAlternation();
-                    try nodes.appendSlice(alternation);
+                    const group = try self.parseGroup();
+                    try nodes.append(.{ .Group = group });
                 },
                 '|', ')' => {
                     self.ip -= 1;
@@ -122,6 +124,21 @@ pub const Parser = struct {
         return nodes.toOwnedSlice();
     }
 
+    fn parseBackreference(nodes: std.ArrayList(Node)) PatternError!Node {
+        var i: usize = nodes.items.len;
+        while (i > 0) {
+            i -= 1;
+            switch (nodes.items[i]) {
+                .Group => {
+                    return nodes.items[i];
+                },
+                else => {},
+            }
+        }
+
+        return PatternError.InvalidBackreference;
+    }
+
     fn setLastQuantifier(nodes: *std.ArrayList(Node), q: Quantifier) PatternError!void {
         if (nodes.items.len == 0)
             return PatternError.UnexpectedQuantifier;
@@ -131,15 +148,16 @@ pub const Parser = struct {
             .Literal => |*lit| lit.*[1] = q,
             .Wildcard => |*wc| wc.*[0] = q,
             .CharacterClass => |*cc| cc.*[1] = q,
-            .Group => |*grp| grp.*[1] = q,
+            .Group => |*grp| grp.*.Quantifier = q,
+            .CharacterGroup => |*grp| grp.*[1] = q,
             .Alternation => |*alt| alt.*[1] = q,
             .EndOfString => return PatternError.UnexpectedQuantifier,
         }
     }
 
-    fn parseAlternation(self: *Self) (PatternError || std.mem.Allocator.Error)![]Node {
+    fn parseGroup(self: *Self) (PatternError || std.mem.Allocator.Error)!Group {
         var children = std.ArrayList(Node).init(self.allocator);
-        var partedParts = std.ArrayList(AlternationNode).init(self.allocator);
+        var partedParts = std.ArrayList(Group).init(self.allocator);
 
         while (true) {
             if (self.peek()) |nxt| {
@@ -165,7 +183,8 @@ pub const Parser = struct {
             try children.append(.{ .Alternation = .{ try partedParts.toOwnedSlice(), Quantifier.One } });
         }
 
-        return children.toOwnedSlice();
+        const ownedChildren = try children.toOwnedSlice();
+        return .{ .Children = ownedChildren, .Quantifier = Quantifier.One };
     }
 
     fn peek(self: *Self) ?u8 {
@@ -185,6 +204,6 @@ pub const Parser = struct {
     }
 
     fn isAtEnd(self: *Self) bool {
-        return self.ip == self.raw.len;
+        return self.ip >= self.raw.len;
     }
 };
