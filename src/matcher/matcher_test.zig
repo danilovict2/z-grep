@@ -70,3 +70,12 @@ test "Alternation" {
     try expect(try matcher.matches("I see 1 cat, 2 dogs and 3 cows", "^I see (\\d (cat|dog|cow)s?(, | and )?)+$"));
     try expect(!try matcher.matches("I see 1 cat, 2 dogs and 3 cows", "^I see (\\d (cat|dog|cow)(, | and )?)+$"));
 }
+
+test "Single Backreference" {
+    try expect(try matcher.matches("cat and cat", "(cat) and \\1"));
+    try expect(!try matcher.matches("cat and dog", "(cat) and \\1"));
+
+    try expect(try matcher.matches("cat and cat", "(\\w+) and \\1"));
+    try expect(try matcher.matches("dog and dog", "(\\w+) and \\1"));
+    try expect(!try matcher.matches("cat and dog", "(\\w+) and \\1"));
+}

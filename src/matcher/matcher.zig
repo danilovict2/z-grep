@@ -64,7 +64,6 @@ fn matchNodes(text: []const u8, pos: *usize, nodes: []Node, nodeIndex: *usize) P
 
             return while (end > start) : (end -= 1) {
                 if (try matchNodes(text, &end, nodes, nodeIndex)) {
-                    std.debug.print("End: {}\n", .{end});
                     pos.* = end;
                     return true;
                 }
