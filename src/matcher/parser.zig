@@ -13,11 +13,12 @@ pub const Node = union(enum) {
     CharacterGroup: struct { []const u8, Quantifier },
     Group: Group,
     Alternation: struct { []Group, Quantifier },
+    Backreference: u8,
 
     pub fn printSelf(self: @This()) void {
         switch (self) {
             .Literal => |literal| {
-                std.debug.print("Literal: {c}\n", .{ literal[0]  });
+                std.debug.print("Literal: {c}\n", .{literal[0]});
             },
             .EndOfString => {
                 std.debug.print("End Of String\n", .{});
@@ -44,6 +45,9 @@ pub const Node = union(enum) {
                 for (group.Children) |child|
                     child.printSelf();
             },
+            .Backreference => |n| {
+                std.debug.print("Backreference: {}\n", .{n});
+            },
         }
     }
 
@@ -56,6 +60,7 @@ pub const Node = union(enum) {
             .CharacterGroup => |group| group[1],
             .Alternation => |alternation| alternation[1],
             .EndOfString => Quantifier.One,
+            .Backreference => Quantifier.One,
         };
     }
 };
@@ -92,7 +97,7 @@ pub const Parser = struct {
                     switch (self.next()) {
                         'd' => try nodes.append(.{ .CharacterClass = .{ "\\d", Quantifier.One } }),
                         'w' => try nodes.append(.{ .CharacterClass = .{ "\\w", Quantifier.One } }),
-                        '1' => try nodes.append(try parseBackreference(nodes)),
+                        '1'...'9' => |num| try nodes.append(.{ .Backreference = num - '1' }),
                         else => try nodes.append(.{ .Literal = .{ '\\', Quantifier.One } }),
                     }
                 },
@@ -124,21 +129,6 @@ pub const Parser = struct {
         return nodes.toOwnedSlice();
     }
 
-    fn parseBackreference(nodes: std.ArrayList(Node)) PatternError!Node {
-        var i: usize = nodes.items.len;
-        while (i > 0) {
-            i -= 1;
-            switch (nodes.items[i]) {
-                .Group => {
-                    return nodes.items[i];
-                },
-                else => {},
-            }
-        }
-
-        return PatternError.InvalidBackreference;
-    }
-
     fn setLastQuantifier(nodes: *std.ArrayList(Node), q: Quantifier) PatternError!void {
         if (nodes.items.len == 0)
             return PatternError.UnexpectedQuantifier;
@@ -152,6 +142,7 @@ pub const Parser = struct {
             .CharacterGroup => |*grp| grp.*[1] = q,
             .Alternation => |*alt| alt.*[1] = q,
             .EndOfString => return PatternError.UnexpectedQuantifier,
+            .Backreference => return PatternError.UnexpectedQuantifier,
         }
     }
 
