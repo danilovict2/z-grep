@@ -79,3 +79,10 @@ test "Single Backreference" {
     try expect(try matcher.matches("dog and dog", "(\\w+) and \\1"));
     try expect(!try matcher.matches("cat and dog", "(\\w+) and \\1"));
 }
+
+test "Multiple Backreferences" {
+    try expect(try matcher.matches("3 red squares and 3 red circles", "(\\d+) (\\w+) squares and \\1 \\2 circles"));
+    try expect(!try matcher.matches("3 red squares and 4 red circles", "(\\d+) (\\w+) squares and \\1 \\2 circles"));
+    try expect(try matcher.matches("abc-def is abc-def, not efg", "([abc]+)-([def]+) is \\1-\\2, not [^xyz]+"));
+    try expect(!try matcher.matches("efg-hij is efg-hij, not efg", "([abc]+)-([def]+) is \\1-\\2, not [^xyz]+"));
+}

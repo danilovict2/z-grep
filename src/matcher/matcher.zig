@@ -136,11 +136,8 @@ fn matchesNode(text: []const u8, pos: *usize, node: Node, match_groups: *MatchGr
             match_groups.*.current += 1;
         },
         .Backreference => |n| {
-            std.debug.print("N: {}; Groups Len: {}\n", .{ n, match_groups.*.groups.len });
             if (n >= match_groups.*.current)
                 return false;
-
-            std.debug.print("Group: {s}; Text: {s}\n", .{ match_groups.*.groups[n], text[idx..] });
 
             if (std.mem.startsWith(u8, text[idx..], match_groups.*.groups[n])) {
                 pos.* += match_groups.*.groups[n].len;
