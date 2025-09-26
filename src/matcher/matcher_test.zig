@@ -86,3 +86,10 @@ test "Multiple Backreferences" {
     try expect(try matcher.matches("abc-def is abc-def, not efg", "([abc]+)-([def]+) is \\1-\\2, not [^xyz]+"));
     try expect(!try matcher.matches("efg-hij is efg-hij, not efg", "([abc]+)-([def]+) is \\1-\\2, not [^xyz]+"));
 }
+
+test "Nested Backreferences" {
+    try expect(try matcher.matches("\"cat and cat\" is the same as \"cat and cat\"", "(\"(cat) and \\2\") is the same as \\1"));
+    try expect(!try matcher.matches("\"cat and cat\" is the same as \"cat and dog\"", "(\"(cat) and \\2\") is the same as \\1"));
+    try expect(try matcher.matches("abc-def is abc-def, not efg, abc, or def", "(([abc]+)-([def]+)) is \\1, not ([^xyz]+), \\2, or \\3"));
+    try expect(!try matcher.matches("grep yes is doing grep yes times, and again grep yes times", "((\\w\\w\\w\\w) (\\d\\d\\d)) is doing \\2 \\3 times, and again \\1 times"));
+}

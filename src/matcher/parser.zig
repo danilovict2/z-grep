@@ -78,7 +78,7 @@ pub const Parser = struct {
     allocator: Allocator,
     raw: []const u8,
     ip: usize = 0,
-    GroupIndex: u8 = 0,
+    GroupCount: u8 = 0,
 
     pub fn init(a: Allocator, pattern: []const u8) !*Self {
         const self = try a.create(Self);
@@ -148,8 +148,8 @@ pub const Parser = struct {
     }
 
     fn parseGroup(self: *Self) (PatternError || std.mem.Allocator.Error)!Group {
-        const index = self.GroupIndex;
-        self.GroupIndex += 1;
+        const index = self.GroupCount;
+        self.GroupCount += 1;
 
         var children = std.ArrayList(Node).init(self.allocator);
         var partedParts = std.ArrayList(Group).init(self.allocator);

@@ -15,7 +15,7 @@ pub fn matches(text: []const u8, pattern: []const u8) !bool {
     const allocator = arena.allocator();
     const p = try parser.Parser.init(allocator, pattern);
     const nodes = try p.parse();
-    var match_groups = MatchGroups{ .groups = try allocator.alloc([]const u8, p.GroupIndex) };
+    var match_groups = MatchGroups{ .groups = try allocator.alloc([]const u8, p.GroupCount) };
     var pos: usize = 0;
     if (pattern[0] == '^')
         return matchesPos(text, &pos, nodes[1..], &match_groups);
@@ -104,7 +104,6 @@ fn matchesNode(text: []const u8, pos: *usize, node: Node, match_groups: *MatchGr
             var matched_any = false;
 
             while (pos.* < text.len and std.ascii.isAlphanumeric(text[pos.*]) and (std.mem.indexOfScalar(u8, charGroup, text[pos.*]) != null) == is_positive) {
-                std.debug.print("Character: {c} matches character group: {s}\n", .{ text[pos.*], charGroup });
                 pos.* += 1;
                 matched_any = true;
             }
