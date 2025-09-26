@@ -5,7 +5,6 @@ const Node = parser.Node;
 const Quantifier = parser.Quantifier;
 const MatchGroups = struct {
     groups: [][]const u8,
-    current: u8 = 0,
 };
 
 pub fn matches(text: []const u8, pattern: []const u8) !bool {
@@ -16,15 +15,7 @@ pub fn matches(text: []const u8, pattern: []const u8) !bool {
     const allocator = arena.allocator();
     const p = try parser.Parser.init(allocator, pattern);
     const nodes = try p.parse();
-    var groups: usize = 0;
-    for (nodes) |node| {
-        switch (node) {
-            .Group => groups += 1,
-            else => {},
-        }
-    }
-
-    var match_groups = MatchGroups{ .groups = try allocator.alloc([]const u8, groups) };
+    var match_groups = MatchGroups{ .groups = try allocator.alloc([]const u8, p.GroupIndex) };
     var pos: usize = 0;
     if (pattern[0] == '^')
         return matchesPos(text, &pos, nodes[1..], &match_groups);
@@ -109,15 +100,16 @@ fn matchesNode(text: []const u8, pos: *usize, node: Node, match_groups: *MatchGr
         },
         .CharacterGroup => |group| {
             const is_positive, const start_index: usize = if (group[0][0] == '^') .{ false, 1 } else .{ true, 0 };
-            var matches_group = std.mem.indexOfScalar(u8, group[0][start_index..], text[idx]) != null;
-            const match = matches_group == is_positive;
+            const charGroup = group[0][start_index..];
+            var matched_any = false;
 
-            while (pos.* < (text.len - 1) and matches_group == is_positive) {
+            while (pos.* < text.len and std.ascii.isAlphanumeric(text[pos.*]) and (std.mem.indexOfScalar(u8, charGroup, text[pos.*]) != null) == is_positive) {
+                std.debug.print("Character: {c} matches character group: {s}\n", .{ text[pos.*], charGroup });
                 pos.* += 1;
-                matches_group = std.mem.indexOfScalar(u8, group[0][start_index..], text[pos.*]) != null;
+                matched_any = true;
             }
 
-            return match;
+            return matched_any;
         },
         .Alternation => |alternation| {
             const alternatives = alternation[0];
@@ -130,14 +122,13 @@ fn matchesNode(text: []const u8, pos: *usize, node: Node, match_groups: *MatchGr
             if (!matchesPos(text, pos, group.Children, match_groups))
                 return false;
 
-            if (match_groups.*.current >= match_groups.*.groups.len)
-                return false;
-            match_groups.*.groups[match_groups.*.current] = text[idx..pos.*];
-            match_groups.*.current += 1;
+            match_groups.*.groups[group.Index] = text[idx..pos.*];
         },
         .Backreference => |n| {
-            if (n >= match_groups.*.current)
+            if (n >= match_groups.*.groups.len)
                 return false;
+
+            std.debug.print("Backreference: {s}\n", .{match_groups.*.groups[n]});
 
             if (std.mem.startsWith(u8, text[idx..], match_groups.*.groups[n])) {
                 pos.* += match_groups.*.groups[n].len;

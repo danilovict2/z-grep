@@ -3,7 +3,7 @@ const Allocator = std.mem.Allocator;
 
 pub const Quantifier = enum { One, OneOrMore, ZeroOrOne };
 
-const Group = struct { Children: []Node, Quantifier: Quantifier };
+const Group = struct { Children: []Node, Quantifier: Quantifier, Index: u8 };
 
 pub const Node = union(enum) {
     Literal: struct { u8, Quantifier },
@@ -78,6 +78,7 @@ pub const Parser = struct {
     allocator: Allocator,
     raw: []const u8,
     ip: usize = 0,
+    GroupIndex: u8 = 0,
 
     pub fn init(a: Allocator, pattern: []const u8) !*Self {
         const self = try a.create(Self);
@@ -147,6 +148,9 @@ pub const Parser = struct {
     }
 
     fn parseGroup(self: *Self) (PatternError || std.mem.Allocator.Error)!Group {
+        const index = self.GroupIndex;
+        self.GroupIndex += 1;
+
         var children = std.ArrayList(Node).init(self.allocator);
         var partedParts = std.ArrayList(Group).init(self.allocator);
 
@@ -158,7 +162,7 @@ pub const Parser = struct {
                         break;
                     },
                     '|' => {
-                        try partedParts.append(.{ .Children = try children.toOwnedSlice(), .Quantifier = Quantifier.One });
+                        try partedParts.append(.{ .Children = try children.toOwnedSlice(), .Quantifier = Quantifier.One, .Index = index });
                         self.advance();
                     },
                     else => {},
@@ -170,12 +174,12 @@ pub const Parser = struct {
         }
 
         if (partedParts.items.len > 0) {
-            try partedParts.append(.{ .Children = try children.toOwnedSlice(), .Quantifier = Quantifier.One });
+            try partedParts.append(.{ .Children = try children.toOwnedSlice(), .Quantifier = Quantifier.One, .Index = index });
             try children.append(.{ .Alternation = .{ try partedParts.toOwnedSlice(), Quantifier.One } });
         }
 
         const ownedChildren = try children.toOwnedSlice();
-        return .{ .Children = ownedChildren, .Quantifier = Quantifier.One };
+        return .{ .Children = ownedChildren, .Quantifier = Quantifier.One, .Index = index };
     }
 
     fn peek(self: *Self) ?u8 {
