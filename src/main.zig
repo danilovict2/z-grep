@@ -18,6 +18,7 @@ fn matchFile(path: []const u8, pattern: []const u8) !bool {
     while (lines.next()) |line| {
         if (try matcher.matches(line, pattern)) {
             try std.io.getStdOut().writeAll(line);
+            try std.io.getStdOut().writeAll("\n");
             ok = true;
         }
     }
