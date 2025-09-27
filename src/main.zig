@@ -1,42 +1,70 @@
 const std = @import("std");
 const matcher = @import("matcher/matcher.zig");
-const FILE_MAX_LEN: usize = 512;
+const FILE_MAX_LEN: usize = 1024;
+const stdout = std.io.getStdOut().writer();
 
 pub fn main() !void {
-    var buffer: [1024]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buffer);
-    const allocator = fba.allocator();
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
 
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    if (args.len < 3 or !std.mem.eql(u8, args[1], "-E")) {
-        std.debug.print("Expected first argument to be '-E'\n", .{});
+    if (args.len < 3 or !(std.mem.eql(u8, args[1], "-E") or std.mem.eql(u8, args[2], "-E"))) {
+        std.debug.print("Expected first or second argument to be '-E'\n", .{});
         std.process.exit(1);
     }
 
-    const pattern = args[2];
+    const recurse = std.mem.eql(u8, args[1], "-r");
+    const pattern = if (recurse) args[3] else args[2];
+
+    var matched = false;
+
     if (args.len > 3) {
-        if (try matchFiles(args[3..], pattern, allocator)) {
-            std.debug.print("Match\n", .{});
-            std.process.exit(0);
+        if (recurse) {
+            matched = try recursiveSearch(args[4], pattern, allocator);
+        } else {
+            matched = try matchFiles(args[3..], pattern, allocator);
         }
-
-        std.debug.print("Not a match\n", .{});
-        std.process.exit(1);
+    } else {
+        var input_line: [1024]u8 = undefined;
+        const input_len = try std.io.getStdIn().reader().read(&input_line);
+        const input_slice = input_line[0..input_len];
+        matched = try matchPattern(input_slice, pattern);
     }
 
-    var input_line: [1024]u8 = undefined;
-    const input_len = try std.io.getStdIn().reader().read(&input_line);
-    const input_slice = input_line[0..input_len];
+    exitWithResult(matched);
+}
 
-    if (try matchPattern(input_slice, pattern)) {
-        std.debug.print("Match\n", .{});
-        std.process.exit(0);
+fn recursiveSearch(dir_path: []const u8, pattern: []const u8, allocator: std.mem.Allocator) !bool {
+    const clean = std.mem.trimRight(u8, dir_path, "/");
+    var dir = try std.fs.cwd().openDir(dir_path, .{});
+    defer dir.close();
+
+    var walker = try dir.walk(allocator);
+    defer walker.deinit();
+
+    var ok: bool = false;
+    while (try walker.next()) |entry| {
+        switch (entry.kind) {
+            .file => {
+                const path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ clean, entry.path });
+                if (matchFile(path, pattern, allocator)) |matchingLines| {
+                    if (matchingLines.len > 0) {
+                        ok = true;
+                        try stdout.print("{s}:", .{path});
+                        for (matchingLines) |line|
+                            try stdout.print("{s}\n", .{line});
+                    }
+                } else |err| {
+                    return err;
+                }
+            },
+            else => {},
+        }
     }
 
-    std.debug.print("Not a match\n", .{});
-    std.process.exit(1);
+    return ok;
 }
 
 fn matchFiles(paths: [][:0]u8, pattern: []const u8, allocator: std.mem.Allocator) !bool {
@@ -44,15 +72,11 @@ fn matchFiles(paths: [][:0]u8, pattern: []const u8, allocator: std.mem.Allocator
     for (paths) |path| {
         if (matchFile(path, pattern, allocator)) |matchingLines| {
             for (matchingLines) |line| {
-                if (paths.len > 1) {
-                    try std.io.getStdOut().writeAll(path);
-                    try std.io.getStdOut().writeAll(":");
-                }
+                if (paths.len > 1)
+                    try stdout.print("{s}:", .{path});
 
-                try std.io.getStdOut().writeAll(line);
-                try std.io.getStdOut().writeAll("\n");
+                try stdout.print("{s}\n", .{line});
             }
-
             ok = ok or matchingLines.len > 0;
         } else |err| {
             return err;
@@ -83,4 +107,14 @@ fn matchFile(path: []const u8, pattern: []const u8, allocator: std.mem.Allocator
 
 fn matchPattern(input_line: []const u8, pattern: []const u8) !bool {
     return matcher.matches(input_line, pattern);
+}
+
+fn exitWithResult(matched: bool) noreturn {
+    if (matched) {
+        std.debug.print("Match\n", .{});
+        std.process.exit(0);
+    }
+
+    std.debug.print("Not a match\n", .{});
+    std.process.exit(1);
 }
