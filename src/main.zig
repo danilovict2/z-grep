@@ -5,6 +5,26 @@ fn matchPattern(input_line: []const u8, pattern: []const u8) !bool {
     return try matcher.matches(input_line, pattern);
 }
 
+fn matchFile(path: []const u8, pattern: []const u8) !bool {
+    const file = try std.fs.cwd().openFile(path, .{});
+    defer file.close();
+
+    const allocator = std.heap.page_allocator;
+    const contents = try file.readToEndAlloc(allocator, 64);
+    defer allocator.free(contents);
+
+    var lines = std.mem.splitScalar(u8, contents, '\n');
+    var ok: bool = false;
+    while (lines.next()) |line| {
+        if (try matcher.matches(line, pattern)) {
+            try std.io.getStdOut().writeAll(line);
+            ok = true;
+        }
+    }
+
+    return ok;
+}
+
 pub fn main() !void {
     var buffer: [1024]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
@@ -19,14 +39,25 @@ pub fn main() !void {
     }
 
     const pattern = args[2];
-    var input_line: [1024]u8 = undefined;
-    const input_len = try std.io.getStdIn().reader().read(&input_line);
-    const input_slice = input_line[0..input_len];
-    if (try matchPattern(input_slice, pattern)) {
-        std.debug.print("Match\n", .{});
-        std.process.exit(0);
-    } else {
+    if (args.len == 4) {
+        if (try matchFile(args[3], pattern)) {
+            std.debug.print("Match\n", .{});
+            std.process.exit(0);
+        }
+
         std.debug.print("Not a match\n", .{});
         std.process.exit(1);
     }
+
+    var input_line: [1024]u8 = undefined;
+    const input_len = try std.io.getStdIn().reader().read(&input_line);
+    const input_slice = input_line[0..input_len];
+
+    if (try matchPattern(input_slice, pattern)) {
+        std.debug.print("Match\n", .{});
+        std.process.exit(0);
+    }
+
+    std.debug.print("Not a match\n", .{});
+    std.process.exit(1);
 }

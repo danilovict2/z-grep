@@ -60,9 +60,11 @@ fn matchNodes(text: []const u8, pos: *usize, nodes: []Node, nodeIndex: *usize, m
 
             nodeIndex.* += 1;
             return while (end > start) : (end -= 1) {
-                if (matchNodes(text, &end, nodes, nodeIndex, match_groups)) {
-                    pos.* = end;
-                    return true;
+                var cur: usize = end;
+                if (matchesPos(text, &cur, nodes[nodeIndex.*..], match_groups)) {
+                    pos.* = cur;
+                    nodeIndex.* = nodes.len;
+                    break true;
                 }
             } else false;
         },
