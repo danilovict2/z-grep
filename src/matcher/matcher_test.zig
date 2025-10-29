@@ -93,3 +93,15 @@ test "Nested Backreferences" {
     try expect(try matcher.matches("abc-def is abc-def, not efg, abc, or def", "(([abc]+)-([def]+)) is \\1, not ([^xyz]+), \\2, or \\3"));
     try expect(!try matcher.matches("grep yes is doing grep yes times, and again grep yes times", "((\\w\\w\\w\\w) (\\d\\d\\d)) is doing \\2 \\3 times, and again \\1 times"));
 }
+
+test "Match zero or more times" {
+    try expect(try matcher.matches("ct", "ca*t"));
+    try expect(try matcher.matches("caaat", "ca*t"));
+    try expect(!try matcher.matches("dog", "ca*t"));
+    try expect(try matcher.matches("kt", "k\\d*t"));
+    try expect(try matcher.matches("k123t", "k\\d*t"));
+    try expect(!try matcher.matches("kabct", "k\\d*t"));
+    try expect(try matcher.matches("kt", "k[abc]*t"));
+    try expect(try matcher.matches("kat", "k[abc]*t"));
+    try expect(!try matcher.matches("kaxyzt", "k[abc]*t"));
+}

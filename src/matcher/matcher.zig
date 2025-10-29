@@ -31,54 +31,61 @@ pub fn matches(text: []const u8, pattern: []const u8) !bool {
 fn matchesPos(text: []const u8, pos: *usize, nodes: []Node, match_groups: *MatchGroups) bool {
     std.debug.print("Starting Text: {s}\n", .{text});
 
-    var nodeIndex: usize = 0;
-    return while (nodeIndex < nodes.len) : (nodeIndex += 1) {
-        if (!matchNodes(text, pos, nodes, &nodeIndex, match_groups))
+    var node_index: usize = 0;
+    return while (node_index < nodes.len) : (node_index += 1) {
+        if (!matchNodes(text, pos, nodes, &node_index, match_groups))
             break false;
     } else true;
 }
 
-fn matchNodes(text: []const u8, pos: *usize, nodes: []Node, nodeIndex: *usize, match_groups: *MatchGroups) bool {
-    if (nodes.len == 0 or nodeIndex.* >= nodes.len)
+fn matchNodes(text: []const u8, pos: *usize, nodes: []Node, node_index: *usize, match_groups: *MatchGroups) bool {
+    if (nodes.len == 0 or node_index.* >= nodes.len)
         return true;
 
-    const node = nodes[nodeIndex.*];
+    const node = nodes[node_index.*];
     const quantifier = node.getQuantifier();
     if (pos.* >= text.len)
-        return node == Node.EndOfString or quantifier == Quantifier.ZeroOrOne;
+        return node == Node.EndOfString or quantifier == Quantifier.ZeroOrOne or quantifier == Quantifier.ZeroOrMore;
 
     std.debug.print("Current Text: {s}\n", .{text[pos.*..]});
     switch (quantifier) {
         .OneOrMore => {
             std.debug.print("One or More\n", .{});
-
-            const start = pos.*;
-            var end: usize = start;
-            while (end < text.len and matchesNode(text, &end, node, match_groups)) {}
-            if (end == start)
-                return false;
-
-            nodeIndex.* += 1;
-            return while (end > start) : (end -= 1) {
-                var cur: usize = end;
-                if (matchesPos(text, &cur, nodes[nodeIndex.*..], match_groups)) {
-                    pos.* = cur;
-                    nodeIndex.* = nodes.len;
-                    break true;
-                }
-            } else false;
+            return matchRepetition(text, pos, node, nodes, node_index, match_groups, true);
         },
         .ZeroOrOne => {
             std.debug.print("Zero or One\n", .{});
-            _ = matchesNode(text, pos, node, match_groups); // // The return value is ignored; only textIndex matters (it increments on match, unchanged otherwise)
+            _ = matchesNode(text, pos, node, match_groups); // The return value is ignored; only textIndex matters (it increments on match, unchanged otherwise)
         },
-        else => {
+        .ZeroOrMore => {
+            std.debug.print("Zero or More\n", .{});
+            return matchRepetition(text, pos, node, nodes, node_index, match_groups, false);
+        },
+        .One => {
             if (!matchesNode(text, pos, node, match_groups))
                 return false;
         },
     }
 
     return true;
+}
+
+fn matchRepetition(text: []const u8, pos: *usize, node: Node, nodes: []Node, node_index: *usize, match_groups: *MatchGroups, must_match_once: bool) bool {
+    const start = pos.*;
+    var end: usize = start;
+    while (end < text.len and matchesNode(text, &end, node, match_groups)) {}
+    if (end == start)
+        return !must_match_once;
+
+    node_index.* += 1;
+    return while (end > start) : (end -= 1) {
+        var cur: usize = end;
+        if (matchesPos(text, &cur, nodes[node_index.*..], match_groups)) {
+            pos.* = cur;
+            node_index.* = nodes.len;
+            break true;
+        }
+    } else false;
 }
 
 fn matchesNode(text: []const u8, pos: *usize, node: Node, match_groups: *MatchGroups) bool {
@@ -128,8 +135,6 @@ fn matchesNode(text: []const u8, pos: *usize, node: Node, match_groups: *MatchGr
         .Backreference => |n| {
             if (n >= match_groups.*.groups.len)
                 return false;
-
-            std.debug.print("Backreference: {s}\n", .{match_groups.*.groups[n]});
 
             if (std.mem.startsWith(u8, text[idx..], match_groups.*.groups[n])) {
                 pos.* += match_groups.*.groups[n].len;

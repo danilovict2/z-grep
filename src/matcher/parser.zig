@@ -1,7 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-pub const Quantifier = enum { One, OneOrMore, ZeroOrOne };
+pub const Quantifier = enum { One, OneOrMore, ZeroOrOne, ZeroOrMore };
 
 const Group = struct { Children: []Node, Quantifier: Quantifier, Index: u8 };
 
@@ -105,7 +105,7 @@ pub const Parser = struct {
                 '[' => {
                     const end = std.mem.indexOfScalarPos(u8, self.raw, self.ip, ']') orelse return PatternError.UnclosedGroup;
                     try nodes.append(.{ .CharacterGroup = .{ self.raw[self.ip..end], Quantifier.One } });
-                    self.ip = end + 2;
+                    self.ip = end + 1;
                 },
                 '$' => try nodes.append(.{ .EndOfString = {} }),
                 '+' => {
@@ -113,6 +113,9 @@ pub const Parser = struct {
                 },
                 '?' => {
                     try setLastQuantifier(&nodes, Quantifier.ZeroOrOne);
+                },
+                '*' => {
+                    try setLastQuantifier(&nodes, Quantifier.ZeroOrMore);
                 },
                 '.' => try nodes.append(.{ .Wildcard = .{Quantifier.One} }),
                 '(' => {
