@@ -1,7 +1,13 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-pub const Quantifier = enum { One, OneOrMore, ZeroOrOne, ZeroOrMore };
+pub const Quantifier = union(enum) {
+    One,
+    OneOrMore,
+    ZeroOrOne,
+    ZeroOrMore,
+    ExactlyN: u16,
+};
 
 const Group = struct { Children: []Node, Quantifier: Quantifier, Index: u8 };
 
@@ -59,8 +65,8 @@ pub const Node = union(enum) {
             .Group => |group| group.Quantifier,
             .CharacterGroup => |group| group[1],
             .Alternation => |alternation| alternation[1],
-            .EndOfString => Quantifier.One,
-            .Backreference => Quantifier.One,
+            .EndOfString => .{ .One = {} },
+            .Backreference => .{ .One = {} },
         };
     }
 };
@@ -70,6 +76,7 @@ const PatternError = error{
     UnclosedGroup,
     UnexpectedQuantifier,
     InvalidBackreference,
+    UnclosedQuantifier,
 };
 
 pub const Parser = struct {
@@ -96,28 +103,28 @@ pub const Parser = struct {
                         return PatternError.UnexpectedEOF;
 
                     switch (self.next()) {
-                        'd' => try nodes.append(.{ .CharacterClass = .{ "\\d", Quantifier.One } }),
-                        'w' => try nodes.append(.{ .CharacterClass = .{ "\\w", Quantifier.One } }),
+                        'd' => try nodes.append(.{ .CharacterClass = .{ "\\d", .{ .One = {} } } }),
+                        'w' => try nodes.append(.{ .CharacterClass = .{ "\\w", .{ .One = {} } } }),
                         '1'...'9' => |num| try nodes.append(.{ .Backreference = num - '1' }),
-                        else => try nodes.append(.{ .Literal = .{ '\\', Quantifier.One } }),
+                        else => try nodes.append(.{ .Literal = .{ '\\', .{ .One = {} } } }),
                     }
                 },
                 '[' => {
                     const end = std.mem.indexOfScalarPos(u8, self.raw, self.ip, ']') orelse return PatternError.UnclosedGroup;
-                    try nodes.append(.{ .CharacterGroup = .{ self.raw[self.ip..end], Quantifier.One } });
+                    try nodes.append(.{ .CharacterGroup = .{ self.raw[self.ip..end], .{ .One = {} } } });
                     self.ip = end + 1;
                 },
                 '$' => try nodes.append(.{ .EndOfString = {} }),
                 '+' => {
-                    try setLastQuantifier(&nodes, Quantifier.OneOrMore);
+                    try setLastQuantifier(&nodes, .{ .OneOrMore = {} });
                 },
                 '?' => {
-                    try setLastQuantifier(&nodes, Quantifier.ZeroOrOne);
+                    try setLastQuantifier(&nodes, .{ .ZeroOrOne = {} });
                 },
                 '*' => {
-                    try setLastQuantifier(&nodes, Quantifier.ZeroOrMore);
+                    try setLastQuantifier(&nodes, .{ .ZeroOrMore = {} });
                 },
-                '.' => try nodes.append(.{ .Wildcard = .{Quantifier.One} }),
+                '.' => try nodes.append(.{ .Wildcard = .{.{ .One = {} }} }),
                 '(' => {
                     const group = try self.parseGroup();
                     try nodes.append(.{ .Group = group });
@@ -126,7 +133,13 @@ pub const Parser = struct {
                     self.ip -= 1;
                     break;
                 },
-                else => try nodes.append(.{ .Literal = .{ c, Quantifier.One } }),
+                '{' => {
+                    const end = std.mem.indexOfScalarPos(u8, self.raw, self.ip, '}') orelse return PatternError.UnclosedQuantifier;
+                    const n = try std.fmt.parseInt(u8, self.raw[self.ip..end], 16);
+                    try setLastQuantifier(&nodes, .{ .ExactlyN = n });
+                    self.ip = end + 1;
+                },
+                else => try nodes.append(.{ .Literal = .{ c, .{ .One = {} } } }),
             }
         }
 
@@ -150,7 +163,7 @@ pub const Parser = struct {
         }
     }
 
-    fn parseGroup(self: *Self) (PatternError || std.mem.Allocator.Error)!Group {
+    fn parseGroup(self: *Self) (PatternError || std.mem.Allocator.Error || std.fmt.ParseIntError)!Group {
         const index = self.GroupCount;
         self.GroupCount += 1;
 
@@ -165,7 +178,7 @@ pub const Parser = struct {
                         break;
                     },
                     '|' => {
-                        try partedParts.append(.{ .Children = try children.toOwnedSlice(), .Quantifier = Quantifier.One, .Index = index });
+                        try partedParts.append(.{ .Children = try children.toOwnedSlice(), .Quantifier = .{ .One = {} }, .Index = index });
                         self.advance();
                     },
                     else => {},
@@ -177,12 +190,12 @@ pub const Parser = struct {
         }
 
         if (partedParts.items.len > 0) {
-            try partedParts.append(.{ .Children = try children.toOwnedSlice(), .Quantifier = Quantifier.One, .Index = index });
-            try children.append(.{ .Alternation = .{ try partedParts.toOwnedSlice(), Quantifier.One } });
+            try partedParts.append(.{ .Children = try children.toOwnedSlice(), .Quantifier = .{ .One = {} }, .Index = index });
+            try children.append(.{ .Alternation = .{ try partedParts.toOwnedSlice(), .{ .One = {} } } });
         }
 
         const ownedChildren = try children.toOwnedSlice();
-        return .{ .Children = ownedChildren, .Quantifier = Quantifier.One, .Index = index };
+        return .{ .Children = ownedChildren, .Quantifier = .{ .One = {} }, .Index = index };
     }
 
     fn peek(self: *Self) ?u8 {

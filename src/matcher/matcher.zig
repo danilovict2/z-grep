@@ -61,6 +61,16 @@ fn matchNodes(text: []const u8, pos: *usize, nodes: []Node, node_index: *usize, 
             std.debug.print("Zero or More\n", .{});
             return matchRepetition(text, pos, node, nodes, node_index, match_groups, false);
         },
+        .ExactlyN => |n| {
+            std.debug.print("Exactly {} Times\n", .{n});
+            var match_count: usize = 0;
+            var start_pos = pos.*;
+            while (pos.* < text.len and matchesNode(text, pos, node, match_groups)) {
+                match_count += if (node == .CharacterGroup) pos.* - start_pos else 1;
+                start_pos = pos.*;
+            }
+            return match_count == n;
+        },
         .One => {
             if (!matchesNode(text, pos, node, match_groups))
                 return false;

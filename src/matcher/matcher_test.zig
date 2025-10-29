@@ -105,3 +105,12 @@ test "Match zero or more times" {
     try expect(try matcher.matches("kat", "k[abc]*t"));
     try expect(!try matcher.matches("kaxyzt", "k[abc]*t"));
 }
+
+test "Match exactly N times" {
+    try expect(try matcher.matches("caaat", "ca{3}t"));
+    try expect(!try matcher.matches("caat", "ca{3}t"));
+    try expect(try matcher.matches("d42g", "d\\d{2}g"));
+    try expect(!try matcher.matches("d4g", "d\\d{2}g"));
+    try expect(try matcher.matches("cherryuoi", "cherry[aeiou]{3}"));
+    try expect(!try matcher.matches("cxyzw", "c[xyz]{4}w"));
+}
