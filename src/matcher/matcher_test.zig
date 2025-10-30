@@ -114,3 +114,10 @@ test "Match exactly N times" {
     try expect(try matcher.matches("cherryuoi", "cherry[aeiou]{3}"));
     try expect(!try matcher.matches("cxyzw", "c[xyz]{4}w"));
 }
+
+test "Match at least N times" {
+    try expect(try matcher.matches("caat", "ca{2,}t"));
+    try expect(try matcher.matches("caaaaaat", "ca{2,}t"));
+    try expect(!try matcher.matches("x42y", "x\\d{3,}y"));
+    try expect(try matcher.matches("potatocorncauliflowerpotato", "(corn|cauliflower|potato){3,}"));
+}

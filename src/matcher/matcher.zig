@@ -51,7 +51,7 @@ fn matchNodes(text: []const u8, pos: *usize, nodes: []Node, node_index: *usize, 
     switch (quantifier) {
         .OneOrMore => {
             std.debug.print("One or More\n", .{});
-            return matchRepetition(text, pos, node, nodes, node_index, match_groups, true);
+            return matchRepetition(text, pos, node, nodes, node_index, match_groups, 1);
         },
         .ZeroOrOne => {
             std.debug.print("Zero or One\n", .{});
@@ -59,7 +59,7 @@ fn matchNodes(text: []const u8, pos: *usize, nodes: []Node, node_index: *usize, 
         },
         .ZeroOrMore => {
             std.debug.print("Zero or More\n", .{});
-            return matchRepetition(text, pos, node, nodes, node_index, match_groups, false);
+            return matchRepetition(text, pos, node, nodes, node_index, match_groups, 0);
         },
         .ExactlyN => |n| {
             std.debug.print("Exactly {} Times\n", .{n});
@@ -71,6 +71,10 @@ fn matchNodes(text: []const u8, pos: *usize, nodes: []Node, node_index: *usize, 
             }
             return match_count == n;
         },
+        .AtLeastN => |n| {
+            std.debug.print("At Least {} times\n", .{n});
+            return matchRepetition(text, pos, node, nodes, node_index, match_groups, n);
+        },
         .One => {
             if (!matchesNode(text, pos, node, match_groups))
                 return false;
@@ -80,12 +84,13 @@ fn matchNodes(text: []const u8, pos: *usize, nodes: []Node, node_index: *usize, 
     return true;
 }
 
-fn matchRepetition(text: []const u8, pos: *usize, node: Node, nodes: []Node, node_index: *usize, match_groups: *MatchGroups, must_match_once: bool) bool {
+fn matchRepetition(text: []const u8, pos: *usize, node: Node, nodes: []Node, node_index: *usize, match_groups: *MatchGroups, min_match_count: u16) bool {
     const start = pos.*;
     var end: usize = start;
-    while (end < text.len and matchesNode(text, &end, node, match_groups)) {}
-    if (end == start)
-        return !must_match_once;
+    var match_count: usize = 0;
+    while (end < text.len and matchesNode(text, &end, node, match_groups)) : (match_count += 1) {}
+    if (match_count < min_match_count)
+        return false;
 
     node_index.* += 1;
     return while (end > start) : (end -= 1) {
@@ -132,8 +137,11 @@ fn matchesNode(text: []const u8, pos: *usize, node: Node, match_groups: *MatchGr
         .Alternation => |alternation| {
             const alternatives = alternation[0];
             return for (alternatives) |alternative| {
-                if (matchesPos(text, pos, alternative.Children, match_groups))
+                var curr: usize = pos.*;
+                if (matchesPos(text, &curr, alternative.Children, match_groups)) {
+                    pos.* = curr;
                     break true;
+                }
             } else false;
         },
         .Group => |group| {
