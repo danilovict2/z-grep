@@ -51,7 +51,7 @@ fn matchNodes(text: []const u8, pos: *usize, nodes: []Node, node_index: *usize, 
     switch (quantifier) {
         .OneOrMore => {
             std.debug.print("One or More\n", .{});
-            return matchRepetition(text, pos, node, nodes, node_index, match_groups, 1);
+            return matchRepetition(text, pos, node, nodes, node_index, match_groups, 1, std.math.maxInt(u16));
         },
         .ZeroOrOne => {
             std.debug.print("Zero or One\n", .{});
@@ -59,7 +59,7 @@ fn matchNodes(text: []const u8, pos: *usize, nodes: []Node, node_index: *usize, 
         },
         .ZeroOrMore => {
             std.debug.print("Zero or More\n", .{});
-            return matchRepetition(text, pos, node, nodes, node_index, match_groups, 0);
+            return matchRepetition(text, pos, node, nodes, node_index, match_groups, 0, std.math.maxInt(u16));
         },
         .ExactlyN => |n| {
             std.debug.print("Exactly {} Times\n", .{n});
@@ -71,9 +71,9 @@ fn matchNodes(text: []const u8, pos: *usize, nodes: []Node, node_index: *usize, 
             }
             return match_count == n;
         },
-        .AtLeastN => |n| {
-            std.debug.print("At Least {} times\n", .{n});
-            return matchRepetition(text, pos, node, nodes, node_index, match_groups, n);
+        .BetweenNAndM => |between| {
+            std.debug.print("At Least {} times and At most {} times\n", .{ between.n, between.m });
+            return matchRepetition(text, pos, node, nodes, node_index, match_groups, between.n, between.m);
         },
         .One => {
             if (!matchesNode(text, pos, node, match_groups))
@@ -84,12 +84,16 @@ fn matchNodes(text: []const u8, pos: *usize, nodes: []Node, node_index: *usize, 
     return true;
 }
 
-fn matchRepetition(text: []const u8, pos: *usize, node: Node, nodes: []Node, node_index: *usize, match_groups: *MatchGroups, min_match_count: u16) bool {
+fn matchRepetition(text: []const u8, pos: *usize, node: Node, nodes: []Node, node_index: *usize, match_groups: *MatchGroups, min_match_count: u16, max_match_count: u16) bool {
     const start = pos.*;
-    var end: usize = start;
+    var match_start, var end = .{ start, start };
     var match_count: usize = 0;
-    while (end < text.len and matchesNode(text, &end, node, match_groups)) : (match_count += 1) {}
-    if (match_count < min_match_count)
+    while (end < text.len and matchesNode(text, &end, node, match_groups)) {
+        match_count += if (node == .CharacterGroup) end - match_start else 1;
+        match_start = end;
+    }
+
+    if (match_count < min_match_count or match_count > max_match_count)
         return false;
 
     node_index.* += 1;

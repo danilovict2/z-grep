@@ -7,7 +7,7 @@ pub const Quantifier = union(enum) {
     ZeroOrOne,
     ZeroOrMore,
     ExactlyN: u16,
-    AtLeastN: u16,
+    BetweenNAndM: struct { n: u16, m: u16 },
 };
 
 const Group = struct { Children: []Node, Quantifier: Quantifier, Index: u8 };
@@ -137,10 +137,11 @@ pub const Parser = struct {
                 '{' => {
                     const end = std.mem.indexOfScalarPos(u8, self.raw, self.ip, '}') orelse return PatternError.UnclosedQuantifier;
                     const first_num_end = std.mem.indexOfScalarPos(u8, self.raw[0..end], self.ip, ',') orelse end;
-                    const n = try std.fmt.parseInt(u8, self.raw[self.ip..first_num_end], 16);
+                    const n = try std.fmt.parseInt(u16, self.raw[self.ip..first_num_end], 16);
 
-                    if (first_num_end != end) {
-                        try setLastQuantifier(&nodes, .{ .AtLeastN = n });
+                    if (first_num_end < end) {
+                        const m = std.fmt.parseInt(u16, self.raw[first_num_end + 1 .. end], 16) catch std.math.maxInt(u16);
+                        try setLastQuantifier(&nodes, .{ .BetweenNAndM = .{ .n = n, .m = m } });
                     } else {
                         try setLastQuantifier(&nodes, .{ .ExactlyN = n });
                     }

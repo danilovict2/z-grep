@@ -121,3 +121,15 @@ test "Match at least N times" {
     try expect(!try matcher.matches("x42y", "x\\d{3,}y"));
     try expect(try matcher.matches("potatocorncauliflowerpotato", "(corn|cauliflower|potato){3,}"));
 }
+
+test "Match between N and M times" {
+    try expect(try matcher.matches("caat", "ca{2,4}t"));
+    try expect(try matcher.matches("caaat", "ca{2,4}t"));
+    try expect(!try matcher.matches("caaaaat", "ca{2,4}t"));
+    try expect(try matcher.matches("n123m", "n\\d{1,3}m"));
+    try expect(!try matcher.matches("n1234m", "n\\d{1,3}m"));
+    try expect(!try matcher.matches("n1234m", "n\\d{1,3}m"));
+    try expect(try matcher.matches("pzzzq", "p[xyz]{2,3}q"));
+    try expect(!try matcher.matches("pxq", "p[xyz]{2,3}q"));
+    try expect(!try matcher.matches("pxyzyq", "p[xyz]{2,3}q"));
+}
